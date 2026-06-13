@@ -1,0 +1,315 @@
+---
+title: "Study 4 - Celiktutan, Klesse & Tuk (2024)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Load packages
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(psych)
+library(lsr)
+```
+
+## Load data
+
+```{r}
+dat <- read_excel("Data_Study4_osf.xlsx")
+```
+
+## Remove test responses
+
+```{r}
+dat <- dat[dat$Q3 != "test", ]
+dat <- dat[dat$Q3 != "TEST", ]
+```
+
+## Keep complete responses
+
+```{r}
+dat <- dat[dat$Status == 0, ]
+dat <- dat[dat$Progress == 100, ]
+dat <- dat[dat$Att_check == 1, ]
+```
+
+## Sample size
+
+```{r}
+nrow(dat)
+```
+
+## Gender
+
+```{r}
+table(dat$gender)
+prop.table(table(dat$gender))
+```
+
+## Age
+
+```{r}
+summary(dat$age)
+```
+
+## Participants per condition
+
+```{r}
+table(dat$self)
+prop.table(table(dat$self))
+```
+
+## Condition bar chart
+
+```{r}
+cond_table <- as.data.frame(table(dat$self))
+names(cond_table) <- c("Condition", "Count")
+cond_table$Condition <- ifelse(cond_table$Condition == 1, "Self", "Other")
+
+ggplot(cond_table, aes(x = Condition, y = Count)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Participants per condition") +
+  theme_minimal()
+```
+
+## Create inferred contribution variable
+
+```{r}
+dat$cont <- ifelse(dat$self == 1, dat$contribute_self_4, dat$cont_others_4)
+```
+
+## Create usage behavior items
+
+```{r}
+dat$inspire <- ifelse(dat$self == 1, dat$inspire_self, dat$inspire_others)
+dat$copy <- ifelse(dat$self == 1, dat$copy_self, dat$copy_others)
+dat$effort <- ifelse(dat$self == 1, dat$effort_self, dat$effort_others)
+```
+
+## Reliability of usage behavior items
+
+```{r}
+psych::alpha(dat[, c("inspire", "copy", "effort")])
+```
+
+## Create usage behavior composite
+
+```{r}
+dat$usagebeh <- (dat$inspire + dat$copy + dat$effort) / 3
+```
+
+## Mean inferred contribution by condition
+
+```{r}
+aggregate(cont ~ self, dat, mean)
+aggregate(cont ~ self, dat, sd)
+```
+
+## Inferred contribution t-test
+
+```{r}
+t.test(cont ~ self, data = dat, var.equal = TRUE)
+```
+
+## Cohen's d for inferred contribution
+
+```{r}
+cohensD(cont ~ self, data = dat)
+```
+
+## Bar chart of inferred contribution
+
+```{r}
+cont_means <- dat %>%
+  group_by(self) %>%
+  summarise(mean_cont = mean(cont), .groups = "drop")
+
+cont_means$Condition <- ifelse(cont_means$self == 1, "Self", "Other")
+
+ggplot(cont_means, aes(x = Condition, y = mean_cont, fill = Condition)) +
+  geom_col() +
+  labs(y = "Inferred contribution (%)", title = "Inferred contribution by condition") +
+  scale_fill_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Boxplot of inferred contribution
+
+```{r}
+dat$Condition <- ifelse(dat$self == 1, "Self", "Other")
+
+ggplot(dat, aes(x = Condition, y = cont, fill = Condition)) +
+  geom_boxplot() +
+  labs(y = "Inferred contribution (%)", title = "Inferred contribution: self vs other") +
+  scale_fill_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Mean usage behavior by condition
+
+```{r}
+aggregate(usagebeh ~ self, dat, mean)
+aggregate(usagebeh ~ self, dat, sd)
+```
+
+## Usage behavior t-test
+
+```{r}
+t.test(usagebeh ~ self, data = dat, var.equal = TRUE)
+```
+
+## Cohen's d for usage behavior
+
+```{r}
+cohensD(usagebeh ~ self, data = dat)
+```
+
+## Bar chart of usage behavior
+
+```{r}
+usage_means <- dat %>%
+  group_by(self) %>%
+  summarise(mean_usage = mean(usagebeh), .groups = "drop")
+
+usage_means$Condition <- ifelse(usage_means$self == 1, "Self", "Other")
+
+ggplot(usage_means, aes(x = Condition, y = mean_usage, fill = Condition)) +
+  geom_col() +
+  labs(y = "Usage behavior (1=outsourcing, 7=inspiration)", title = "Perceived usage behavior by condition") +
+  scale_fill_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Mediation: path a (self to usage behavior)
+
+```{r}
+dat$self_num <- as.numeric(dat$self)
+model_a <- lm(usagebeh ~ self_num, data = dat)
+summary(model_a)
+```
+
+## Mediation: path c (total effect of self on contribution)
+
+```{r}
+model_c <- lm(cont ~ self_num, data = dat)
+summary(model_c)
+```
+
+## Mediation: path b and c prime (self and usage behavior on contribution)
+
+```{r}
+model_b <- lm(cont ~ self_num + usagebeh, data = dat)
+summary(model_b)
+```
+
+## Indirect effect
+
+```{r}
+a <- coef(model_a)["self_num"]
+b <- coef(model_b)["usagebeh"]
+indirect <- a * b
+indirect
+```
+
+## ChatGPT experience
+
+```{r}
+table(dat$use_chatgpt)
+prop.table(table(dat$use_chatgpt))
+```
+
+## ChatGPT experience by condition
+
+```{r}
+table(dat$use_chatgpt, dat$self)
+```
+
+## Chi-square test for ChatGPT experience
+
+```{r}
+chisq.test(table(dat$use_chatgpt, dat$self))
+```
+
+## ANOVA: contribution by condition and ChatGPT experience
+
+```{r}
+dat$self_f <- factor(dat$self)
+dat$use_chatgpt_f <- factor(dat$use_chatgpt)
+
+aov_result <- aov(cont ~ self_f * use_chatgpt_f, data = dat)
+summary(aov_result)
+```
+
+## Mean contribution by ChatGPT experience
+
+```{r}
+aggregate(cont ~ use_chatgpt, dat, mean)
+aggregate(cont ~ use_chatgpt, dat, sd)
+```
+
+## Bar chart of contribution by ChatGPT experience
+
+```{r}
+chatgpt_means <- dat %>%
+  group_by(use_chatgpt) %>%
+  summarise(mean_cont = mean(cont), .groups = "drop")
+
+chatgpt_means$Experience <- ifelse(chatgpt_means$use_chatgpt == 1, "Yes", "No")
+
+ggplot(chatgpt_means, aes(x = Experience, y = mean_cont, fill = Experience)) +
+  geom_col() +
+  labs(y = "Inferred contribution (%)", title = "Contribution by ChatGPT experience") +
+  scale_fill_manual(values = c("Yes" = "seagreen", "No" = "gray70")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Create psychological ownership variable
+
+```{r}
+dat$psyown <- ifelse(dat$self == 1, dat$psyown_self, dat$psyown_others)
+```
+
+## Mean psychological ownership by condition
+
+```{r}
+aggregate(psyown ~ self, dat, mean)
+aggregate(psyown ~ self, dat, sd)
+```
+
+## Psychological ownership t-test
+
+```{r}
+t.test(psyown ~ self_f, data = dat, var.equal = TRUE)
+```
+
+## Cohen's d for psychological ownership
+
+```{r}
+cohensD(psyown ~ self_f, data = dat)
+```
+
+## Bar chart of psychological ownership
+
+```{r}
+psy_means <- dat %>%
+  group_by(self) %>%
+  summarise(mean_psyown = mean(psyown), .groups = "drop")
+
+psy_means$Condition <- ifelse(psy_means$self == 1, "Self", "Other")
+
+ggplot(psy_means, aes(x = Condition, y = mean_psyown, fill = Condition)) +
+  geom_col() +
+  labs(y = "Psychological ownership", title = "Psychological ownership by condition") +
+  scale_fill_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```

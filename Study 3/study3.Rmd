@@ -1,0 +1,276 @@
+---
+title: "Study 3 - Celiktutan, Klesse & Tuk (2024)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Load packages
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lme4)
+library(emmeans)
+```
+
+## Load pretest data
+
+```{r}
+pretest <- read_excel("Data_Study3_pretest_osf.xlsx")
+pretest <- pretest[pretest$Progress == 100, ]
+```
+
+## Pretest sample size
+
+```{r}
+nrow(pretest)
+```
+
+## Pretest gender
+
+```{r}
+table(pretest$gender)
+prop.table(table(pretest$gender))
+```
+
+## Pretest age
+
+```{r}
+summary(pretest$age)
+```
+
+## Pretest behavior categorization
+
+```{r}
+behavior_cols <- c("B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10")
+
+for (col in behavior_cols) {
+  cat(col, "\n")
+  print(round(prop.table(table(pretest[[col]])) * 100, 2))
+}
+```
+
+## Pretest outsourcing percentages
+
+```{r}
+outsource_pct <- data.frame(
+  Behavior = 1:10,
+  outsource = c(8.43, 57.83, 20.48, 68.67, 33.73, 21.69, 81.93, 90.36, 90.36, 78.31)
+)
+
+outsource_pct
+```
+
+## Pretest outsourcing bar chart
+
+```{r}
+ggplot(outsource_pct, aes(x = factor(Behavior), y = outsource)) +
+  geom_col(fill = "steelblue") +
+  labs(x = "Behavior", y = "Outsourcing (%)", title = "Pretest: Behaviors seen as outsourcing") +
+  theme_minimal()
+```
+
+## Load main study data
+
+```{r}
+dat <- read_excel("Data_Study3_osf.xlsx")
+dat <- dat[dat$Status == 0, ]
+dat <- dat[dat$Progress == 100, ]
+```
+
+## Main study sample size
+
+```{r}
+nrow(dat)
+```
+
+## Main study gender
+
+```{r}
+table(dat$gender)
+prop.table(table(dat$gender))
+```
+
+## Main study age
+
+```{r}
+summary(dat$age)
+```
+
+## Remove missing responses
+
+```{r}
+dat <- dat[
+  dat$self != 1 |
+    (!is.na(dat$B1_self) & !is.na(dat$B2_self) & !is.na(dat$B3_self) &
+     !is.na(dat$B4_self) & !is.na(dat$B5_self) & !is.na(dat$B6_self) &
+     !is.na(dat$B7_self) & !is.na(dat$B8_self) & !is.na(dat$B9_self) &
+     !is.na(dat$B10_self)),
+]
+
+dat <- dat[
+  dat$self != 0 |
+    (!is.na(dat$B1_other) & !is.na(dat$B2_other) & !is.na(dat$B3_other) &
+     !is.na(dat$B4_other) & !is.na(dat$B5_other) & !is.na(dat$B6_other) &
+     !is.na(dat$B7_other) & !is.na(dat$B8_other) & !is.na(dat$B9_other) &
+     !is.na(dat$B10_other)),
+]
+```
+
+## Participants per condition
+
+```{r}
+table(dat$self)
+prop.table(table(dat$self))
+```
+
+## Condition bar chart
+
+```{r}
+cond_table <- as.data.frame(table(dat$self))
+names(cond_table) <- c("Condition", "Count")
+cond_table$Condition <- ifelse(cond_table$Condition == 1, "Self", "Other")
+
+ggplot(cond_table, aes(x = Condition, y = Count)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Participants per condition") +
+  theme_minimal()
+```
+
+## Create usage likelihood variables
+
+```{r}
+dat$B1 <- ifelse(dat$self == 1, dat$B1_self, dat$B1_other)
+dat$B2 <- ifelse(dat$self == 1, dat$B2_self, dat$B2_other)
+dat$B3 <- ifelse(dat$self == 1, dat$B3_self, dat$B3_other)
+dat$B4 <- ifelse(dat$self == 1, dat$B4_self, dat$B4_other)
+dat$B5 <- ifelse(dat$self == 1, dat$B5_self, dat$B5_other)
+dat$B6 <- ifelse(dat$self == 1, dat$B6_self, dat$B6_other)
+dat$B7 <- ifelse(dat$self == 1, dat$B7_self, dat$B7_other)
+dat$B8 <- ifelse(dat$self == 1, dat$B8_self, dat$B8_other)
+dat$B9 <- ifelse(dat$self == 1, dat$B9_self, dat$B9_other)
+dat$B10 <- ifelse(dat$self == 1, dat$B10_self, dat$B10_other)
+```
+
+## Reshape data to long format
+
+```{r}
+dat_long <- dat %>%
+  select(ResponseId, self, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10) %>%
+  pivot_longer(cols = starts_with("B"), names_to = "Behavior", values_to = "Likelihood")
+
+dat_long$Behavior <- as.numeric(gsub("B", "", dat_long$Behavior))
+```
+
+## Add outsourcing score from pretest
+
+```{r}
+dat_long$outsource <- outsource_pct$outsource[match(dat_long$Behavior, outsource_pct$Behavior)]
+dat_long$outsource_centered <- dat_long$outsource - mean(dat_long$outsource)
+```
+
+## Descriptive statistics
+
+```{r}
+summary(dat_long$Likelihood)
+summary(dat_long$outsource_centered)
+```
+
+## Mean likelihood by condition
+
+```{r}
+dat_long %>%
+  group_by(self) %>%
+  summarise(mean_likelihood = mean(Likelihood))
+```
+
+## Mean likelihood by behavior
+
+```{r}
+dat_long %>%
+  group_by(Behavior) %>%
+  summarise(mean_likelihood = mean(Likelihood))
+```
+
+## Mean likelihood by behavior and condition
+
+```{r}
+means_plot <- dat_long %>%
+  group_by(Behavior, self) %>%
+  summarise(mean_likelihood = mean(Likelihood), .groups = "drop")
+
+means_plot$Condition <- ifelse(means_plot$self == 1, "Self", "Other")
+```
+
+## Bar chart of mean likelihood by behavior
+
+```{r}
+ggplot(means_plot, aes(x = factor(Behavior), y = mean_likelihood, fill = Condition)) +
+  geom_col(position = "dodge") +
+  labs(x = "Behavior", y = "Mean likelihood", title = "Usage likelihood by behavior") +
+  theme_minimal()
+```
+
+## Main analysis: mixed effects model
+
+```{r}
+mixedreg <- lmer(Likelihood ~ self * outsource_centered + (1 | ResponseId), data = dat_long)
+summary(mixedreg)
+```
+
+## Planned contrasts
+
+```{r}
+probe <- emmeans(mixedreg, ~ self * outsource_centered,
+                 at = list(outsource_centered = c(-40, -30, -20, -10, 0, 10, 20, 30)))
+contrast(probe, "revpairwise", by = "outsource_centered")
+```
+
+## Prepare data for interaction plot
+
+```{r}
+dat_long$Condition <- ifelse(dat_long$self == 1, "Self", "Other")
+plot_model <- lm(Likelihood ~ Condition * outsource_centered, data = dat_long)
+```
+
+## Interaction plot data
+
+```{r}
+plotdat <- expand.grid(
+  Condition = c("Self", "Other"),
+  outsource_centered = seq(min(dat_long$outsource_centered), max(dat_long$outsource_centered), length.out = 100)
+)
+
+plotdat$Likelihood <- predict(plot_model, newdata = plotdat)
+```
+
+## Interaction plot
+
+```{r}
+ggplot(plotdat, aes(x = outsource_centered, y = Likelihood, color = Condition)) +
+  geom_line(size = 1) +
+  labs(
+    x = "Outsourcing (centered)",
+    y = "Usage likelihood",
+    title = "Self-other difference in usage likelihood"
+  ) +
+  scale_color_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## Boxplot of likelihood by condition
+
+```{r}
+ggplot(dat_long, aes(x = Condition, y = Likelihood, fill = Condition)) +
+  geom_boxplot() +
+  labs(title = "Usage likelihood: self vs other") +
+  scale_fill_manual(values = c("Self" = "coral", "Other" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
